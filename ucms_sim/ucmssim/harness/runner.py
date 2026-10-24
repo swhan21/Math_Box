@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Sequence
@@ -10,6 +11,12 @@ from typing import Callable, Sequence
 from ..config import Configs
 from .report import write_outputs
 from .scenarios import SCENARIOS, RunContext, RunResult
+
+
+def pad(text: str, width: int) -> str:
+    """터미널 표시 폭 기준 왼쪽 정렬 (한글 등 전각 문자는 2칸)."""
+    cells = sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+    return text + " " * max(0, width - cells)
 
 
 def resolve_ids(spec: str) -> list[str]:
@@ -58,7 +65,7 @@ def run_campaign(
             passed += r.passed
         last = results[-1]
         lat = f", 지연 {last.latency_s:.3f} s" if last.latency_s is not None else ""
-        progress(f"  {sid} {sc.title:<24} {passed}/{n} 통과{lat}  ({time.perf_counter() - w0:.1f} s)")
+        progress(f"  {sid} {pad(sc.title, 30)} {passed:>2}/{n:<2} 통과{lat}  ({time.perf_counter() - w0:.1f} s)")
 
     meta = {
         "started": started,
