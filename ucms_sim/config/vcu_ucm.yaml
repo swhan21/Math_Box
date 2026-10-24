@@ -1,0 +1,107 @@
+# VCU UCM 어댑터 설정 (연구설계안 6.9절, ICD 초안 7장)
+#
+# 고장코드·특성값·임계값·건전성 규칙은 코드가 아닌 이 파일로 정의한다 (설계 방침 3 '설정 기반').
+# 수치는 SIL 시뮬레이션을 돌리기 위한 예시값(제안값)이다. 실제 값은 ICD 확정 시 교체한다 (D6).
+# 값을 TBD로 두면 로더가 오류를 내고 멈춘다.
+
+resource:
+  id: UGV_VCU_01          # 간이 정적 ID (D7, 편차 DEV-003)
+  name: VCU
+  kind: LRU
+
+adapter:
+  task_period_ms: 100     # 저우선 태스크 주기 (제어 주기 10 ms와 분리, 6.1절)
+  queue_size: 256         # 제어 SW → 어댑터 단방향 링버퍼 크기
+
+# 7.1절 고장코드. clear: auto(자동) / latch(래치, 운용자 해제) / restart(재기동 시 해제)
+faults:
+  - id: F01
+    internal_dtc: 0x1A01
+    description: 인버터 CAN 메시지 타임아웃
+    bit_type: CBIT
+    severity: high
+    clear: auto
+  - id: F02
+    internal_dtc: 0x1A02
+    description: 구동모터 과온
+    bit_type: CBIT
+    severity: high
+    clear: latch
+  - id: F03
+    internal_dtc: 0x1A03
+    description: 배터리 저전압
+    bit_type: CBIT
+    severity: high
+    clear: auto
+  - id: F04
+    internal_dtc: 0x1A04
+    description: 온도센서 단선·범위 이탈
+    bit_type: CBIT
+    severity: medium
+    clear: auto
+  - id: F05
+    internal_dtc: 0x1A05
+    description: 휠속도 센서 불일치
+    bit_type: CBIT
+    severity: medium
+    clear: auto
+  - id: F06
+    internal_dtc: 0x1A06
+    description: 비휘발 메모리 점검 실패
+    bit_type: PBIT
+    severity: high
+    clear: restart
+
+# SC1: 기존 VCU 진단 항목 중 UCM으로 매핑하지 않은 항목과 그 사유
+unmapped_dtcs:
+  - internal_dtc: 0x1C02
+    reason: 조향 제어기 소관 진단 — 조향 리소스가 자체 R-role로 보고 예정
+  - internal_dtc: 0x1F01
+    reason: 개발용 디버그 카운터 — 운용·정비 정보 아님
+
+# 7.2절 특성값. signal = 제어 SW가 공유 메모리에 쓰는 내부 변수 이름
+# threshold: 엔지니어링 물리 한계값 (정비 기준 임계값은 IPS 소관, 12장)
+characteristics:
+  - id: C01
+    name: drive_motor_temp
+    unit: degC
+    rate_hz: 1
+    signal: motor_temp
+    threshold: {max: 140, hysteresis: 2, attack_samples: 3, release_samples: 3}
+  - id: C02
+    name: battery_voltage
+    unit: V
+    rate_hz: 1
+    signal: battery_voltage
+    threshold: {min: 310, hysteresis: 2, attack_samples: 3, release_samples: 3}
+  - id: C03
+    name: inverter_temp
+    unit: degC
+    rate_hz: 1
+    signal: inverter_temp
+    threshold: {max: 95, hysteresis: 2, attack_samples: 3, release_samples: 3}
+  - id: C04
+    name: vcu_internal_temp
+    unit: degC
+    rate_hz: 0.2
+    signal: vcu_temp
+    threshold: {max: 85, hysteresis: 2, attack_samples: 2, release_samples: 2}
+
+# 7.3절 사용량 (2단계 항목)
+usage:
+  - id: U01
+    type: powered_on_time
+    unit: s
+    publish_period_s: 10
+    persist: true
+  - id: U02
+    type: emergency_stop_count
+    unit: count
+    persist: true
+
+# 7.4절 건전성 판정 규칙 (규격에 집계 알고리즘 없음 → 편차 DEV-004)
+health_rule:
+  red_if:
+    - pbit_failed
+    - any_active_fault_with_severity: high
+  otherwise: green

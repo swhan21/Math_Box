@@ -1,0 +1,16 @@
+# UCMS 브리지 설정 (연구설계안 6.4절 '브리지 처리 순서', 6.9절, 부록 A.6)
+#
+# R-role을 구현하지 못하는 단순 장비를 대신해 감시 사양(메타데이터)을 UCMS가 대리 발행한다.
+# 대기 시간 안에 장비가 직접 사양을 발행하면 장비 사양을 채택한다 (리소스 발행 우선).
+
+policy:
+  bridge_grace_ms: 5000
+
+fallbacks:
+  - resource: SIMPLE_TEMP_SENSOR
+    characteristic: cabin_temp
+    name: cabin_temp
+    unit: degC
+    rate_hz: 1
+    threshold: {max: 50, hysteresis: 1, attack_samples: 3, release_samples: 3}
+    rationale: "단순 온도센서, 자체 R-role 미지원"

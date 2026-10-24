@@ -1,0 +1,61 @@
+# SIL 시뮬레이션 환경 설정 (플랜트·기존 VCU·네트워크·UCMS·하니스)
+# 모든 수치는 SIL용 예시값이다.
+
+plant_step_ms: 10           # HILS 실시간 시뮬레이터 스텝
+
+network:                    # 모의 DDS 전송 지연 (이더넷 + DDS 스택)
+  latency_min_ms: 0.5
+  latency_max_ms: 3.0
+  best_effort_loss: 0.0
+
+plant:                      # 구동모터·인버터·배터리·센서 플랜트 모델
+  mass_kg: 3000
+  wheel_radius_m: 0.4
+  gear_ratio: 10
+  max_motor_power_w: 100000
+  ambient_c: 25
+  motor_rth: 0.15
+  motor_cth: 3000
+  battery_capacity_ah: 115
+  battery_r_ohm: 0.08
+  initial_soc: 0.9
+
+vcu:
+  boot_ms: 300
+  pbit_ms: 200
+  control_period_ms: 10
+  control_phase_ms: 5       # 플랜트 스텝과 비동기 (5 ms 위상차)
+
+vcu_bit:                    # 기존 VCU BIT 교정값 (기존 SW 소관, UCM 설정 아님)
+  inverter_can_timeout_s: 0.1
+  motor_overtemp_set_c: 150
+  motor_overtemp_clear_c: 140
+  motor_overtemp_debounce_s: 0.5
+  battery_uv_set_v: 300
+  battery_uv_clear_v: 310
+  battery_uv_debounce_s: 0.5
+  temp_sensor_min_v: 0.2
+  temp_sensor_max_v: 4.8
+  temp_sensor_debounce_s: 0.1
+  wheel_mismatch_kph: 3.0
+  wheel_min_speed_kph: 5.0
+  wheel_mismatch_debounce_s: 0.5
+  clear_debounce_s: 1.0
+
+vcu_control:                # 기존 속도 제어기 (PI)
+  kp: 40
+  ki: 10
+  max_torque_nm: 400
+  max_regen_nm: -150
+
+ucms:
+  processing_delay_ms: 5    # 수신 → 판정·저장·발행 처리 시간 가정
+  sample_commit_period_s: 5 # 특성값 샘플 일괄 저장 주기
+  fault_spec_wait_s: 1.0    # Fault_Code 사양 미수신 시 보류 시간 (편차 DEV-011)
+
+harness:
+  repetitions: 30           # 지연 측정 시나리오 반복 횟수 (8.3절)
+  latency_limit_s: 1.0      # SC3
+  latency_percentile: 95
+  fi11_duration_s: 3600     # FI-11 정상 운전 시간 (SC4)
+  settle_s: 8

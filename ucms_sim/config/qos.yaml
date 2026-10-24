@@ -1,0 +1,24 @@
+# 토픽별 QoS (연구설계안 6.7절)
+# 실제 DDS에서는 기동 시 XML 설정 파일로 적용한다. 모의 DDS에서는 이 YAML을 쓴다 (편차 DEV-007).
+
+profiles:
+  # 상태 토픽: 늦게 접속한 구독자도 현재 상태를 받는다
+  state:    {durability: TRANSIENT_LOCAL, reliability: RELIABLE, depth: 1}
+  # 명령 토픽: 재기동 후 오래된 명령 무시
+  command:  {durability: VOLATILE, reliability: RELIABLE, depth: 10, lifespan_s: 10}
+  # 주기 토픽: 수명을 발행 주기에 맞춤 (1 Hz → 1 s)
+  periodic: {durability: VOLATILE, reliability: RELIABLE, depth: 1, lifespan_s: 1.0}
+
+topics:
+  Resource_Registration: state
+  Resource_With_Monitoring: state
+  Monitored_Resource: state
+  Monitored_Resource_Specification: state
+  Monitored_Attribute_Specification: state
+  Fault_Code_Specification: state
+  Fault_Code: state
+  Fault_Event: state
+  Threshold_Exceedance_Event: state
+  Characteristic_Usage: state
+  Monitored_Characteristic__supplyCharacteristicValue: periodic
+  Fault_Code__clearFault: command
