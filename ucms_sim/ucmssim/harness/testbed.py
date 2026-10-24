@@ -116,6 +116,7 @@ class Testbed:
         realtime: float | None = None,
         device_spec=None,
         device_spec_delay_s: float = 0.0,
+        hmi_trend_len: int = 40,
     ) -> None:
         self.cfg = cfg
         self.seed = seed
@@ -138,7 +139,7 @@ class Testbed:
             spec=device_spec, spec_delay_s=device_spec_delay_s,
         )
         self.ucms = self._new_ucms()
-        self.hmi = SimpleHmi(self.sched, self.domain, cfg.qos)
+        self.hmi = SimpleHmi(self.sched, self.domain, cfg.qos, trend_len=hmi_trend_len)
         self.observer = HarnessObserver(self.sched, self.domain, cfg.qos)
         self._timers: list[Timer] = []
         self.closed = False

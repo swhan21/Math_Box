@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UCMS 간이 HMI</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ef;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --series: #2a78d6;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --btn: #ecebe7;
+  --btn-hover: #e1e0d9;
+  --font: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "WenQuanYi Zen Hei", sans-serif;
+  --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", Consolas, "WenQuanYi Zen Hei Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220; --text: #f0efec; --text-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+    --series: #3987e5; --btn: #2a2a28; --btn-hover: #353532;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220; --text: #f0efec; --text-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+  --series: #3987e5; --btn: #2a2a28; --btn-hover: #353532;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--text); font: 14px/1.45 var(--font); }
+button { font: inherit; color: inherit; }
+h2 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+small, .sub { color: var(--text-2); font-size: 12px; font-weight: 400; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.muted { color: var(--muted); }
+
+/* 상단 바 */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 10px 20px;
+       background: var(--surface); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: baseline; gap: 10px; font-size: 16px; font-weight: 600; }
+.brand .tag { font-family: var(--mono); font-size: 12px; padding: 2px 6px; border-radius: 4px; background: var(--surface-2);
+              border: 1px solid var(--border); color: var(--text-2); }
+.spacer { flex: 1; }
+.clock { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.link { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
+.banner { background: var(--critical); color: #fff; padding: 6px 20px; font-weight: 600; }
+
+/* 배치 */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px 20px 24px; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1180px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .row2 { grid-template-columns: minmax(0, 1fr); } .layout { padding: 12px; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.card-head .spacer { flex: 1; }
+.count { font-variant-numeric: tabular-nums; color: var(--text-2); font-weight: 400; margin-left: 6px; }
+.empty { color: var(--muted); margin: 6px 0 2px; }
+
+/* 상태 표시: 색 + 아이콘 + 글자 (색만으로 의미 전달 금지) */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.s-good { background: var(--good); } .s-warning { background: var(--warning); }
+.s-serious { background: var(--serious); } .s-critical { background: var(--critical); }
+.s-muted, .s-na { background: var(--muted); } .s-neutral { background: var(--series); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border-radius: 999px;
+        border: 1px solid var(--border); background: var(--surface-2); font-size: 12px; white-space: nowrap; }
+
+/* 리소스 건전성 */
+.res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.res { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 8px; background: var(--surface-2);
+       border: 1px solid var(--border); border-left: 4px solid var(--muted); }
+.res-good { border-left-color: var(--good); } .res-critical { border-left-color: var(--critical); }
+.res-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none;
+            font-size: 22px; font-weight: 700; color: #fff; background: var(--muted); }
+.res-good .res-icon { background: var(--good); } .res-critical .res-icon { background: var(--critical); }
+.res-id { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+.res-state { font-size: 20px; font-weight: 600; line-height: 1.25; }
+.res-meta { font-size: 12.5px; color: var(--text-2); }
+
+/* 표 */
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-2); padding: 0 8px 6px; border-bottom: 1px solid var(--grid); }
+td { padding: 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+th, td { white-space: nowrap; }
+td.wrap { white-space: normal; word-break: keep-all; min-width: 140px; }
+.table-wrap { overflow-x: auto; }
+tr:last-child td { border-bottom: 0; }
+
+/* 버튼 */
+.btn { white-space: nowrap; border: 1px solid var(--border); background: var(--btn); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--btn-hover); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .switch:focus-visible, .chart-plot:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.btn-primary { background: var(--series); border-color: transparent; color: #fff; font-weight: 600; }
+.btn-primary:hover:not(:disabled) { background: var(--series); filter: brightness(1.1); }
+.btn-sm { padding: 3px 12px; font-size: 13px; }
+.ghost { background: transparent; }
+
+/* 특성값 차트 */
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.chart { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 6px; min-width: 0; }
+.chart-head { display: flex; align-items: flex-start; gap: 8px; }
+.chart-title { font-weight: 600; font-size: 13px; }
+.chart-value { margin-left: auto; text-align: right; }
+.chart-value b { font-size: 20px; font-weight: 600; }
+.chart-meta { display: flex; gap: 6px; align-items: center; min-height: 22px; margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.chart-plot { display: block; width: 100%; height: 150px; margin-top: 4px; touch-action: none; }
+.chart-plot text { font: 11px var(--font); fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart-plot .lim-label { fill: var(--text-2); }
+.tooltip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+           border-radius: 6px; padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); font-size: 12px; }
+.tooltip b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.tooltip .key { display: inline-block; width: 12px; height: 2px; background: var(--series); vertical-align: middle; margin-right: 6px; }
+
+/* 사용량·이벤트 */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.tile .label { font-size: 12px; color: var(--text-2); }
+.tile .value { font-size: 24px; font-weight: 600; }
+.events { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
+.events li { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--grid); }
+.events li:last-child { border-bottom: 0; }
+.events .num { color: var(--text-2); font-family: var(--mono); font-size: 12px; }
+.events .dot { transform: translateY(-1px); }
+
+/* 시험 하니스 (HMI 기능 아님) */
+.harness { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; align-self: start; }
+.h-head { padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); border-radius: 10px 10px 0 0; }
+.h-head p { margin: 2px 0 0; font-size: 12px; color: var(--text-2); }
+.h-sec { padding: 12px 16px; border-bottom: 1px solid var(--grid); }
+.h-sec:last-child { border-bottom: 0; }
+.h-sec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg .btn { padding: 4px 10px; }
+.seg .btn[aria-pressed="true"] { background: var(--series); color: #fff; border-color: transparent; }
+.ctl { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.ctl .id { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); width: 42px; flex: none; }
+.ctl .label { flex: 1; font-size: 13px; }
+.switch { width: 40px; height: 22px; border-radius: 11px; border: 1px solid var(--border); background: var(--btn); position: relative;
+          cursor: pointer; flex: none; padding: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+                 background: var(--text-2); transition: left 0.12s; }
+.switch[aria-checked="true"] { background: var(--critical); border-color: transparent; }
+.switch[aria-checked="true"]::after { left: 20px; background: #fff; }
+.ctl .btn { padding: 3px 10px; font-size: 12.5px; min-width: 64px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 13px; }
+.kv dt { color: var(--text-2); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.status-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.hlog { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 180px; overflow: auto; }
+.hlog li { padding: 2px 0; color: var(--text-2); }
+.hlog .num { font-family: var(--mono); margin-right: 8px; }
+.toast { position: fixed; right: 20px; bottom: 20px; z-index: 30; background: var(--surface); border: 1px solid var(--border);
+         border-left: 4px solid var(--good); border-radius: 8px; padding: 10px 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.3); max-width: 420px; }
+.toast.err { border-left-color: var(--critical); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">UCMS 간이 HMI <span class="tag">UGV · SIL</span></div>
+  <div class="spacer"></div>
+  <div class="clock" id="clock" aria-label="모의 시각">T+00:00:00</div>
+  <div class="link" id="link"><span class="dot s-muted"></span><span>연결 중</span></div>
+  <button class="btn ghost" id="themeBtn" type="button">밝은 화면</button>
+</header>
+<div class="banner" id="banner" hidden>서버 연결 끊김 — 재시도 중</div>
+<div class="banner" id="simError" hidden></div>
+
+<main class="layout">
+  <div class="col" aria-label="HMI">
+    <section class="card">
+      <div class="card-head"><h2>리소스 건전성</h2><small>Monitored_Resource</small></div>
+      <div class="res-grid" id="resources"></div>
+    </section>
+
+    <div class="row2">
+      <section class="card">
+        <div class="card-head"><h2>활성 고장<span class="count" id="faultCount"></span></h2><small>Fault_Event</small></div>
+        <div class="table-wrap"><table id="faultTable" hidden>
+          <thead><tr><th>심각도</th><th>코드</th><th>내용</th><th>BIT</th><th>상태</th><th>발생</th><th></th></tr></thead>
+          <tbody id="faultBody"></tbody>
+        </table></div>
+        <p class="empty" id="faultEmpty">활성 고장 없음</p>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>임계값 초과<span class="count" id="thCount"></span></h2><small>Threshold_Exceedance_Event</small></div>
+        <div class="table-wrap"><table id="thTable" hidden>
+          <thead><tr><th>구분</th><th>특성</th><th>한계</th><th>초과 값</th><th>사양</th><th>발생</th></tr></thead>
+          <tbody id="thBody"></tbody>
+        </table></div>
+        <p class="empty" id="thEmpty">임계값 초과 없음</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>특성값 추이</h2><small>최근 3분 · 점선 = 임계값</small>
+        <div class="spacer"></div>
+        <button class="btn ghost btn-sm" id="tableToggle" type="button" aria-pressed="false">표로 보기</button>
+      </div>
+      <div class="chart-grid" id="charts"></div>
+      <div class="table-wrap"><table id="trendTable" hidden>
+        <thead><tr><th>특성</th><th>현재</th><th>3분 최소</th><th>3분 최대</th><th>임계값</th><th>상태</th><th>사양</th></tr></thead>
+        <tbody id="trendBody"></tbody>
+      </table></div>
+    </section>
+
+    <div class="row2">
+      <section class="card">
+        <div class="card-head"><h2>사용량</h2><small>Characteristic_Usage</small></div>
+        <div class="tiles" id="usage"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>이벤트 기록</h2><small>HMI 수신 순</small></div>
+        <ol class="events" id="events"></ol>
+      </section>
+    </div>
+  </div>
+
+  <aside class="harness" aria-label="시험 하니스">
+    <div class="h-head"><h2>시험 하니스</h2><p>고장 주입·시험 제어 — HMI 기능 아님 (시험용)</p></div>
+    <div class="h-sec">
+      <h3>상태</h3>
+      <div class="status-row" id="hStatus"></div>
+      <h3>배속</h3>
+      <div class="seg" id="simSpeed"></div>
+    </div>
+    <div class="h-sec"><h3>차량 속도 지령 (km/h)</h3><div class="seg" id="vehSpeed"></div></div>
+    <div class="h-sec"><h3>신호·통신 고장 (켜고 끄기)</h3><div id="toggles"></div></div>
+    <div class="h-sec"><h3>플랜트 프로파일</h3><div id="profiles"></div></div>
+    <div class="h-sec"><h3>기동·서비스</h3><div id="actions"></div></div>
+    <div class="h-sec"><h3>플랜트 참값 (HMI에는 보이지 않음)</h3><dl class="kv" id="plant"></dl></div>
+    <div class="h-sec"><h3>하니스 기록</h3><ul class="hlog" id="hlog"></ul></div>
+  </aside>
+</main>
+<div class="tooltip" id="tooltip" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+
+// 문자열은 항상 textContent 로 넣는다 (수신 데이터를 HTML로 해석하지 않음)
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+function s(tag, attrs) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  return el;
+}
+const chip = (status, label) => h("span", { class: "chip" }, h("span", { class: `dot s-${status}`, "aria-hidden": "true" }), label);
+
+function fmtT(t) {
+  t = Math.max(0, t || 0);
+  const p = (n) => String(Math.floor(n)).padStart(2, "0");
+  return `T+${p(t / 3600)}:${p((t % 3600) / 60)}:${p(t % 60)}`;
+}
+function fmtDur(sec) {
+  const p = (n) => String(Math.floor(n)).padStart(2, "0");
+  return `${Math.floor(sec / 3600)}:${p((sec % 3600) / 60)}:${p(sec % 60)}`;
+}
+const UNIT = { degC: "°C", V: "V", s: "s", count: "회" };
+const unit = (u) => UNIT[u] ?? u ?? "";
+const fmtV = (v, d = 1) => (v == null ? "—" : Number(v).toFixed(d));
+
+const SEVERITY = { high: ["critical", "높음"], medium: ["warning", "중간"], low: ["muted", "낮음"], unknown: ["muted", "미상"] };
+const EVENT_KIND = { fault: "critical", health_red: "critical", exceeded: "critical", latched: "serious",
+                     cleared: "good", health_green: "good", released: "good", command: "neutral" };
+const USAGE_LABEL = { powered_on_time: "누적 가동시간", emergency_stop_count: "비상정지 작동" };
+
+const sigs = {};
+function changed(key, value) {
+  const sig = JSON.stringify(value);
+  if (sigs[key] === sig) return false;
+  sigs[key] = sig;
+  return true;
+}
+
+// ------------------------------------------------------------------ HMI 영역
+
+function renderResources(list) {
+  if (!changed("res", list)) return;
+  $("resources").replaceChildren(...list.map((r) => {
+    let status = "na", label = "판정 없음", icon = "–";
+    if (r.health === "RED") { status = "critical"; label = "고장 (RED)"; icon = "!"; }
+    else if (r.health === "GREEN") { status = "good"; label = "정상 (GREEN)"; icon = "✓"; }
+    let meta;
+    if (r.health == null) meta = `R-role 미지원 · 사양 출처 ${r.provider === "BRIDGE" ? "브리지" : (r.provider || "-")}`;
+    else meta = !r.pbit_complete ? "PBIT 진행 중" : (r.pbit_passed ? "PBIT 통과" : "PBIT 실패");
+    if (r.active_faults) meta += ` · 활성 고장 ${r.active_faults}건`;
+    return h("div", { class: `res res-${status}` },
+      h("div", { class: "res-icon", "aria-hidden": "true" }, icon),
+      h("div", {}, h("div", { class: "res-id" }, r.resource_id), h("div", { class: "res-state" }, label),
+        h("div", { class: "res-meta" }, meta)));
+  }));
+}
+
+function renderFaults(faults) {
+  $("faultCount").textContent = faults.length ? `${faults.length}건` : "";
+  $("faultTable").hidden = faults.length === 0;
+  $("faultEmpty").hidden = faults.length > 0;
+  if (!changed("faults", faults)) return;
+  $("faultBody").replaceChildren(...faults.map((f) => {
+    const [sev, sevLabel] = SEVERITY[f.severity] || SEVERITY.unknown;
+    const action = f.latched
+      ? h("button", { class: "btn btn-primary btn-sm", type: "button", title: "래치 고장 운용자 해제 (Fault_Code__clearFault)",
+                      onclick: () => send("clear_fault", { resource_id: f.resource_id, fault_code_id: f.fault_code_id }) }, "해제")
+      : h("span", { class: "muted", title: "조건 해소 또는 재기동 시 해제" }, "—");
+    return h("tr", {},
+      h("td", {}, chip(sev, sevLabel)),
+      h("td", { class: "mono" }, f.fault_code_id),
+      h("td", { class: "wrap" }, f.description, h("div", { class: "sub mono" }, `${f.event_id} · ${f.resource_id}`)),
+      h("td", {}, f.bit_type),
+      h("td", {}, f.latched ? chip("serious", "래치") : chip("critical", "활성")),
+      h("td", { class: "num" }, fmtT(f.raised_time)),
+      h("td", {}, action));
+  }));
+}
+
+function renderThresholds(list) {
+  $("thCount").textContent = list.length ? `${list.length}건` : "";
+  $("thTable").hidden = list.length === 0;
+  $("thEmpty").hidden = list.length > 0;
+  if (!changed("th", list)) return;
+  $("thBody").replaceChildren(...list.map((e) => h("tr", {},
+    h("td", {}, chip("critical", e.limit_type === "MAX" ? "상한 초과" : "하한 미달")),
+    h("td", {}, h("span", { class: "mono" }, e.characteristic_id), h("div", { class: "sub mono" }, e.resource_id)),
+    h("td", { class: "num" }, String(e.limit_value)),
+    h("td", { class: "num" }, fmtV(e.trigger_value)),
+    h("td", {}, e.spec_provider === "BRIDGE" ? "브리지" : "리소스"),
+    h("td", { class: "num" }, fmtT(e.exceeded_time)))));
+}
+
+function renderUsage(list) {
+  if (!changed("usage", list)) return;
+  if (!list.length) { $("usage").replaceChildren(h("p", { class: "empty" }, "수신된 사용량 없음")); return; }
+  $("usage").replaceChildren(...list.map((u) => h("div", { class: "tile" },
+    h("div", { class: "label" }, `${USAGE_LABEL[u.usage_type] || u.usage_type} (${u.usage_id})`),
+    h("div", { class: "value" }, u.unit === "s" ? fmtDur(u.value) : `${Math.round(u.value)}${unit(u.unit)}`),
+    h("div", { class: "sub mono" }, u.resource_id))));
+}
+
+function renderEvents(list) {
+  if (!changed("events", list)) return;
+  $("events").replaceChildren(...list.map((e) => h("li", {},
+    h("span", { class: "num" }, fmtT(e.t)),
+    h("span", { class: `dot s-${EVENT_KIND[e.kind] || "muted"}`, "aria-hidden": "true" }),
+    h("span", {}, e.text))));
+}
+
+// ------------------------------------------------------------------ 특성값 차트
+
+const WINDOW = 180;            // 표시 구간 [s]
+const cards = new Map();       // 차트 카드는 한 번 만들고 갱신만 한다
+let hover = null;              // { key, px }
+let latest = null;
+
+function niceTicks(lo, hi, count) {
+  const raw = (hi - lo) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  const step = (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+  const ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(+v.toFixed(6));
+  return { ticks, step };
+}
+
+function makeCard(key) {
+  const title = h("div", { class: "chart-title" });
+  const subtitle = h("div", { class: "sub mono" });
+  const value = h("b");
+  const valueUnit = h("span", { class: "sub" });
+  const meta = h("div", { class: "chart-meta" });
+  const plot = s("svg", { class: "chart-plot", tabindex: "0", role: "img" });
+  const el = h("div", { class: "chart" },
+    h("div", { class: "chart-head" }, h("div", {}, title, subtitle), h("div", { class: "chart-value" }, value, " ", valueUnit)),
+    meta, plot);
+  const card = { key, el, title, subtitle, value, valueUnit, meta, plot, geom: null };
+  plot.addEventListener("pointermove", (e) => {
+    hover = { key, px: e.clientX - plot.getBoundingClientRect().left };
+    drawHover(card);
+  });
+  plot.addEventListener("pointerleave", () => { hover = null; drawHover(card); });
+  plot.addEventListener("focus", () => { hover = { key, px: Infinity }; drawHover(card); });
+  plot.addEventListener("blur", () => { hover = null; drawHover(card); });
+  return card;
+}
+
+function drawChart(card, tr, now, exceeded) {
+  const W = Math.max(card.plot.clientWidth || 300, 200), H = 150;
+  const m = { l: 40, r: 10, t: 10, b: 22 };
+  const pts = tr.points.filter((p) => p[0] >= now - WINDOW);
+  const lims = [tr.max_limit, tr.min_limit].filter((v) => v != null);
+  const vals = pts.map((p) => p[1]);
+  let lo = Math.min(...vals, ...lims), hi = Math.max(...vals, ...lims);
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.1;
+  lo -= pad; hi += pad;
+  const { ticks, step } = niceTicks(lo, hi, 4);
+  const x = (t) => m.l + (t - (now - WINDOW)) / WINDOW * (W - m.l - m.r);
+  const y = (v) => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  const svg = card.plot;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("aria-label", `${tr.characteristic_id} ${tr.name} 최근 3분 추이`);
+  const kids = [];
+  for (const v of ticks) {
+    kids.push(s("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }));
+    const t = s("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" });
+    t.textContent = step >= 1 ? String(Math.round(v)) : v.toFixed(1);
+    kids.push(t);
+  }
+  kids.push(s("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1 }));
+  for (const [off, label] of [[-180, "-3분"], [-120, "-2분"], [-60, "-1분"], [0, "현재"]]) {
+    const t = s("text", { x: x(now + off), y: H - 6, "text-anchor": off === -180 ? "start" : off === 0 ? "end" : "middle" });
+    t.textContent = label;
+    kids.push(t);
+  }
+  // 임계값: 초과 영역 옅은 칠 + 점선 + 라벨
+  const lim = (v, above, label) => {
+    const yl = y(v);
+    const top = above ? m.t : yl, bottom = above ? yl : H - m.b;
+    if (bottom > top) kids.push(s("rect", { x: m.l, y: top, width: W - m.l - m.r, height: bottom - top,
+                                            fill: "var(--critical)", "fill-opacity": exceeded ? 0.14 : 0.07 }));
+    kids.push(s("line", { x1: m.l, x2: W - m.r, y1: yl, y2: yl, stroke: "var(--critical)", "stroke-width": 1,
+                          "stroke-dasharray": "4 3" }));
+    const below = !above && yl + 14 <= H - m.b - 2;
+    const t = s("text", { x: m.l + 4, y: below ? yl + 12 : yl - 4, class: "lim-label" });
+    t.textContent = label;
+    kids.push(t);
+  };
+  if (tr.max_limit != null) lim(tr.max_limit, true, `상한 ${tr.max_limit} ${unit(tr.unit)}`);
+  if (tr.min_limit != null) lim(tr.min_limit, false, `하한 ${tr.min_limit} ${unit(tr.unit)}`);
+  if (pts.length) {
+    kids.push(s("polyline", { points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" "),
+                              fill: "none", stroke: "var(--series)", "stroke-width": 2, "stroke-linejoin": "round",
+                              "stroke-linecap": "round" }));
+    const [tl, vl] = pts[pts.length - 1];
+    kids.push(s("circle", { cx: x(tl), cy: y(vl), r: 4, fill: "var(--series)", stroke: "var(--surface-2)", "stroke-width": 2 }));
+  }
+  const hoverLayer = s("g", {});
+  kids.push(hoverLayer);
+  svg.replaceChildren(...kids);
+  card.geom = { pts, x, y, m, H, hoverLayer, tr };
+  drawHover(card);
+}
+
+function drawHover(card) {
+  const g = card.geom;
+  const tip = $("tooltip");
+  if (!g) return;
+  g.hoverLayer.replaceChildren();
+  if (!hover || hover.key !== card.key || !g.pts.length) {
+    if (!hover || hover.key === card.key) tip.hidden = true;
+    return;
+  }
+  let best = g.pts[g.pts.length - 1], bestD = Infinity;
+  if (isFinite(hover.px)) {
+    for (const p of g.pts) {
+      const d = Math.abs(g.x(p[0]) - hover.px);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+  }
+  const cx = g.x(best[0]), cy = g.y(best[1]);
+  g.hoverLayer.append(
+    s("line", { x1: cx, x2: cx, y1: g.m.t, y2: g.H - g.m.b, stroke: "var(--text-2)", "stroke-width": 1 }),
+    s("circle", { cx, cy, r: 4, fill: "var(--series)", stroke: "var(--surface-2)", "stroke-width": 2 }));
+  tip.replaceChildren(
+    h("div", {}, h("b", {}, fmtV(best[1])), " ", unit(g.tr.unit)),
+    h("div", { class: "sub" }, h("span", { class: "key" }), `${g.tr.characteristic_id} ${g.tr.name}`),
+    h("div", { class: "sub num" }, fmtT(best[0])));
+  tip.hidden = false;
+  const r = card.plot.getBoundingClientRect();
+  const left = r.left + cx + 14;
+  tip.style.left = `${left + tip.offsetWidth > window.innerWidth - 8 ? r.left + cx - tip.offsetWidth - 14 : left}px`;
+  tip.style.top = `${r.top + Math.max(cy - 20, 0)}px`;
+}
+
+function renderTrends(hmi) {
+  const exceededKeys = new Set(hmi.thresholds.map((e) => `${e.resource_id}/${e.characteristic_id}`));
+  const rows = [];
+  for (const tr of hmi.trends) {
+    const key = `${tr.resource_id}/${tr.characteristic_id}`;
+    let card = cards.get(key);
+    if (!card) { card = makeCard(key); cards.set(key, card); $("charts").append(card.el); }
+    const last = tr.points.length ? tr.points[tr.points.length - 1][1] : null;
+    const exceeded = exceededKeys.has(key);
+    card.title.textContent = tr.name === tr.characteristic_id ? tr.name : `${tr.characteristic_id} · ${tr.name}`;
+    card.subtitle.textContent = tr.resource_id + (tr.provider === "BRIDGE" ? " · 브리지 사양" : "");
+    card.value.textContent = fmtV(last);
+    card.valueUnit.textContent = unit(tr.unit);
+    const metaKids = [];
+    if (exceeded) metaKids.push(chip("critical", "임계 초과"));
+    if (tr.stale) metaKids.push(chip("muted", "갱신 지연"));
+    if (!exceeded && !tr.stale && last != null) metaKids.push(chip("good", "정상 범위"));
+    if (last == null) metaKids.push(chip("muted", "값 없음"));
+    if (changed(`meta:${key}`, [exceeded, tr.stale, last == null])) card.meta.replaceChildren(...metaKids);
+    if (!$("charts").hidden) drawChart(card, tr, hmi.t, exceeded);
+
+    const win = tr.points.filter((p) => p[0] >= hmi.t - WINDOW).map((p) => p[1]);
+    const limits = [tr.max_limit != null ? `≤ ${tr.max_limit}` : null, tr.min_limit != null ? `≥ ${tr.min_limit}` : null]
+      .filter(Boolean).join(", ");
+    rows.push(h("tr", {},
+      h("td", {}, h("span", { class: "mono" }, tr.characteristic_id), ` ${tr.name}`, h("div", { class: "sub mono" }, tr.resource_id)),
+      h("td", { class: "num" }, `${fmtV(last)} ${unit(tr.unit)}`),
+      h("td", { class: "num" }, win.length ? fmtV(Math.min(...win)) : "—"),
+      h("td", { class: "num" }, win.length ? fmtV(Math.max(...win)) : "—"),
+      h("td", { class: "num" }, limits ? `${limits} ${unit(tr.unit)}` : "—"),
+      h("td", {}, exceeded ? chip("critical", "임계 초과") : tr.stale ? chip("muted", "갱신 지연") : chip("good", "정상 범위")),
+      h("td", {}, tr.provider === "BRIDGE" ? "브리지" : "리소스")));
+  }
+  if (!$("trendTable").hidden) $("trendBody").replaceChildren(...rows);
+}
+
+$("tableToggle").addEventListener("click", () => {
+  const showTable = $("trendTable").hidden;
+  $("trendTable").hidden = !showTable;
+  $("charts").hidden = showTable;
+  $("tableToggle").setAttribute("aria-pressed", String(showTable));
+  $("tableToggle").textContent = showTable ? "차트로 보기" : "표로 보기";
+  if (latest) render(latest);
+});
+
+// ------------------------------------------------------------------ 시험 하니스 (한 번 만들고 상태만 갱신)
+
+const SIM_SPEEDS = [[0, "정지"], [1, "1×"], [2, "2×"], [5, "5×"], [10, "10×"]];
+const VEH_SPEEDS = [0, 20, 40, 60];
+const TOGGLES = [["can_block", "FI-01", "인버터 CAN 차단"], ["sensor_open", "FI-04", "모터 온도센서 단선"],
+                 ["wheel_stuck", "FI-05", "좌측 휠속도 센서 고착"], ["estop", "U02", "비상정지"]];
+const PROFILES = [["overtemp", "FI-02", "모터 과온 → 160 °C (래치)"], ["undervolt", "FI-03", "배터리 전압 강하 → 280 V"],
+                  ["inverter_hot", "C03", "인버터 과열 (임계값만)"], ["oscillate", "FI-07", "C01 임계값 근처 진동"],
+                  ["cabin_hot", "FI-10", "실내온도 상승 (브리지 장비)"]];
+const ACTIONS = [["nvm_reboot", "FI-06", "NVM 손상 후 VCU 재기동"], ["vcu_reboot", "—", "VCU 재기동"],
+                 ["ucms_restart", "FI-08", "UCMS 재기동 (3 s 정지)"]];
+const ctl = {};
+
+function buildHarness() {
+  ctl.sim = SIM_SPEEDS.map(([v, label]) => h("button", { class: "btn", type: "button", "aria-pressed": "false",
+    onclick: () => send("sim_speed", { factor: v }) }, label));
+  $("simSpeed").replaceChildren(...ctl.sim);
+  ctl.veh = VEH_SPEEDS.map((v) => h("button", { class: "btn", type: "button", "aria-pressed": "false",
+    onclick: () => send("speed", { kph: v }) }, String(v)));
+  $("vehSpeed").replaceChildren(...ctl.veh);
+  ctl.toggles = {};
+  $("toggles").replaceChildren(...TOGGLES.map(([name, id, label]) => {
+    const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": "false", "aria-label": label,
+      onclick: () => send(name, { on: sw.getAttribute("aria-checked") !== "true" }) });
+    ctl.toggles[name] = sw;
+    return h("div", { class: "ctl" }, h("span", { class: "id" }, id), h("span", { class: "label" }, label), sw);
+  }));
+  ctl.profiles = {};
+  $("profiles").replaceChildren(...PROFILES.map(([name, id, label]) => {
+    const b = h("button", { class: "btn", type: "button", onclick: () => send(name) }, "주입");
+    ctl.profiles[name] = b;
+    return h("div", { class: "ctl" }, h("span", { class: "id" }, id), h("span", { class: "label" }, label), b);
+  }));
+  $("actions").replaceChildren(...ACTIONS.map(([name, id, label]) => h("div", { class: "ctl" },
+    h("span", { class: "id" }, id), h("span", { class: "label" }, label),
+    h("button", { class: "btn", type: "button", onclick: () => send(name) }, "실행"))));
+}
+
+const PLANT = [["speed_kph", "차속", "km/h", 1], ["motor_temp", "구동모터 온도", "°C", 1], ["inverter_temp", "인버터 온도", "°C", 1],
+               ["battery_voltage", "배터리 전압", "V", 1], ["soc", "SOC", "%", 1], ["vcu_temp", "VCU 내부 온도", "°C", 1],
+               ["cabin_temp", "실내 온도", "°C", 1]];
+
+function renderHarness(hs) {
+  ctl.sim.forEach((b, i) => b.setAttribute("aria-pressed", String(SIM_SPEEDS[i][0] === hs.sim_speed)));
+  ctl.veh.forEach((b, i) => b.setAttribute("aria-pressed", String(VEH_SPEEDS[i] === hs.setpoint_kph)));
+  for (const [name, sw] of Object.entries(ctl.toggles)) sw.setAttribute("aria-checked", String(!!hs.toggles[name]));
+  for (const [name, b] of Object.entries(ctl.profiles)) {
+    b.disabled = !!hs.busy[name];
+    b.textContent = hs.busy[name] ? "진행 중" : "주입";
+  }
+  if (changed("hstatus", [hs.vcu, hs.ucms, hs.boot_count])) {
+    const vcuStatus = hs.vcu === "운용" ? "good" : hs.vcu === "전원 차단" ? "critical" : "warning";
+    const ucmsStatus = hs.ucms === "동작" ? "good" : "critical";
+    $("hStatus").replaceChildren(chip(vcuStatus, `VCU ${hs.vcu} (부팅 ${hs.boot_count}회)`), chip(ucmsStatus, `UCMS ${hs.ucms}`));
+  }
+  $("plant").replaceChildren(...PLANT.flatMap(([k, label, u, d]) => [h("dt", {}, label), h("dd", {}, `${fmtV(hs.plant[k], d)} ${u}`)]));
+  if (changed("hlog", hs.log)) {
+    $("hlog").replaceChildren(...hs.log.map((e) => h("li", {}, h("span", { class: "num" }, fmtT(e.t)), e.text)));
+  }
+}
+
+// ------------------------------------------------------------------ 통신
+
+function render(data) {
+  latest = data;
+  const hmi = data.hmi;
+  $("clock").textContent = fmtT(hmi.t);
+  renderResources(hmi.resources);
+  renderFaults(hmi.faults);
+  renderThresholds(hmi.thresholds);
+  renderTrends(hmi);
+  renderUsage(hmi.usage);
+  renderEvents(hmi.events);
+  renderHarness(data.harness);
+  $("simError").hidden = !data.harness.error;
+  $("simError").textContent = data.harness.error ? `시뮬레이션 오류로 정지: ${data.harness.error}` : "";
+}
+
+function setLink(ok) {
+  $("banner").hidden = ok;
+  $("link").replaceChildren(h("span", { class: `dot ${ok ? "s-good" : "s-critical"}`, "aria-hidden": "true" }),
+                            h("span", {}, ok ? "서버 연결" : "연결 끊김"));
+}
+
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    render(await r.json());
+    setLink(true);
+  } catch (e) {
+    setLink(false);
+  } finally {
+    polling = false;
+  }
+}
+
+let toastTimer = null;
+function toast(text, isError) {
+  const t = $("toast");
+  t.textContent = text;
+  t.className = isError ? "toast err" : "toast";
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2800);
+}
+
+async function send(action, args) {
+  try {
+    const r = await fetch("/api/cmd", { method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action, args: args || {} }) });
+    const res = await r.json();
+    toast(res.ok ? res.message : res.error, !res.ok);
+  } catch (e) {
+    toast("명령 전송 실패", true);
+  }
+  poll();
+}
+
+// ------------------------------------------------------------------ 테마
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  $("themeBtn").textContent = theme === "dark" ? "밝은 화면" : "어두운 화면";
+  try { localStorage.setItem("ucms-hmi-theme", theme); } catch (e) { /* 저장 불가 환경 */ }
+  if (latest) render(latest);
+}
+$("themeBtn").addEventListener("click", () =>
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"));
+let savedTheme = null;
+try { savedTheme = localStorage.getItem("ucms-hmi-theme"); } catch (e) { /* 무시 */ }
+applyTheme(savedTheme === "light" ? "light" : "dark");
+
+buildHarness();
+poll();
+setInterval(poll, 300);
+window.addEventListener("resize", () => { if (latest) render(latest); });
+</script>
+</body>
+</html>

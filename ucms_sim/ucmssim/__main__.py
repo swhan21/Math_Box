@@ -3,6 +3,7 @@
     python -m ucmssim list                       시나리오 목록
     python -m ucmssim run [--quick] [...]        고장 주입 시험 캠페인 (FI-01~13) → out/
     python -m ucmssim demo [--realtime 5 --live] 서술형 데모 (HMI 화면)
+    python -m ucmssim gui [--port 8765]          웹 HMI (브라우저에서 http://127.0.0.1:8765/)
 """
 
 from __future__ import annotations
@@ -35,6 +36,13 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--live", action="store_true", help="1초마다 HMI 화면 갱신 (--realtime 과 함께)")
     demo.add_argument("--db", type=Path, default=Path("out/demo.sqlite"))
 
+    gui = sub.add_parser("gui", help="웹 HMI (실시간 시뮬레이션 + 브라우저 화면)")
+    gui.add_argument("--host", default="127.0.0.1", help="바인딩 주소 (기본 127.0.0.1, 인증 없음 주의)")
+    gui.add_argument("--port", type=int, default=8765)
+    gui.add_argument("--speed", type=float, default=1.0, help="시작 배속 (화면에서 변경 가능)")
+    gui.add_argument("--db", type=Path, default=Path("out/gui.sqlite"))
+    gui.add_argument("--open", action="store_true", help="브라우저 자동 열기")
+
     args = ap.parse_args(argv)
     try:
         cfg = load_configs(args.config)
@@ -45,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         for sc in SCENARIOS.values():
             rep = " (반복)" if sc.repeated else ""
             print(f"{sc.id}  [{sc.level}] {sc.title} — {sc.expected}  {'/'.join(sc.criteria)}{rep}")
+        return 0
+
+    if args.cmd == "gui":
+        from .gui.server import run_gui
+        run_gui(cfg, args.host, args.port, args.speed, args.db, open_browser=args.open)
         return 0
 
     if args.cmd == "demo":

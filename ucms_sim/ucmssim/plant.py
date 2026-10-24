@@ -123,6 +123,9 @@ class UgvPlant:
     def clear_override(self, name: str) -> None:
         self._overrides.pop(name, None)
 
+    def has_override(self, name: str) -> bool:
+        return name in self._overrides
+
     def _ov(self, name: str, t: float, model_value: float) -> float:
         profile = self._overrides.get(name)
         if profile is None:

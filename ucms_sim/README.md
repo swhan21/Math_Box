@@ -28,6 +28,7 @@ python -m ucmssim run                    # 전체 (FI-01~03 각 30회, FI-11 1�
 python -m ucmssim run --scenarios FI-01,FI-08 --reps 10 --out out/partial
 python -m ucmssim demo                   # 서술형 데모 (HMI 화면 출력)
 python -m ucmssim demo --realtime 5 --live   # 5배속, HMI 화면 1초마다 갱신
+python -m ucmssim gui --open                 # 웹 HMI → http://127.0.0.1:8765/
 
 python -m unittest discover -s tests -t .    # 단위·통합 시험
 ```
@@ -41,6 +42,31 @@ python -m unittest discover -s tests -t .    # 단위·통합 시험
 | `db/FI-xx.sqlite` | 시나리오별 UCMS 저장소 (마지막 실행) |
 | `deviation_log.md` | 편차 기록부 (DEV-001~011) |
 | `hmi/*.txt` | 간이 HMI 화면 스냅샷 (FI-09 늦은 접속 화면 등) |
+
+## 웹 HMI (GUI)
+
+```bash
+python -m ucmssim gui                        # http://127.0.0.1:8765/ 를 브라우저로 연다
+python -m ucmssim gui --speed 5 --open       # 5배속으로 시작, 브라우저 자동 열기
+```
+
+시뮬레이션을 실시간(배속 조절 가능)으로 돌리면서 브라우저에서 HMI 화면을 보여준다.
+설계안 6.8절의 "웹 기반" HMI 안이며, 표준 라이브러리만 쓰고 외부 CDN이 없어 폐쇄망에서도 동작한다.
+
+| 영역 | 내용 |
+|---|---|
+| 리소스 건전성 | `Monitored_Resource`: 정상(GREEN)/고장(RED), PBIT 결과, 활성 고장 수. 브리지 장비는 "R-role 미지원" |
+| 활성 고장 | `Fault_Event`: 심각도·코드·내용·BIT 유형·활성/래치·발생 시각. **래치 고장은 [해제] 버튼** → `Fault_Code__clearFault` 송신 |
+| 임계값 초과 | `Threshold_Exceedance_Event`: 상한 초과/하한 미달, 한계·초과 값, 사양 출처(리소스/브리지) |
+| 특성값 추이 | 최근 3분 차트(점선 = 임계값, 초과 영역 음영), 커서를 올리면 값·시각 표시. [표로 보기]로 표 전환 |
+| 사용량·이벤트 기록 | U01 가동시간, U02 비상정지 횟수, HMI가 받은 순서의 이벤트 |
+| 시험 하니스 (오른쪽) | HMI 기능이 아닌 시험용 패널: 배속, 속도 지령, 고장 주입(FI-01·04·05 켜고 끄기, FI-02·03·07·10 프로파일, C03 과열), VCU·UCMS 재기동(FI-06·08), 플랜트 참값 |
+
+화면 왼쪽은 HMI가 DDS로 실제 받은 값만 보여주고, 플랜트 참값은 하니스 패널에만 보인다.
+어두운 화면이 기본이고 상단 버튼으로 밝은 화면으로 바꿀 수 있다.
+
+> 인증이 없으므로 기본적으로 `127.0.0.1` 에만 연다. 실험실 망의 다른 PC에서 보려면 `--host 0.0.0.0` 을 쓰되
+> 신뢰할 수 있는 폐쇄망에서만 사용한다. 명령 API(`POST /api/cmd`)는 JSON 본문만 받는다.
 
 ## 구성
 
@@ -69,7 +95,8 @@ python -m unittest discover -s tests -t .    # 단위·통합 시험
 | 6.4 Usage Tracker | `UsageTracker` | `ucmssim/ucms/usage_tracker.py` |
 | 6.4 Persistence (SQLite) | `UcmsStore` | `ucmssim/ucms/persistence.py` |
 | 6.2 DDS I/O | `UcmsService` | `ucmssim/ucms/service.py` |
-| 간이 HMI | `SimpleHmi` | `ucmssim/hmi.py` |
+| 간이 HMI | `SimpleHmi` (텍스트 화면·상태 사전) | `ucmssim/hmi.py` |
+| 간이 HMI 웹 화면 (6.8) | `SimRuntime`, HTTP 서버, `index.html` | `ucmssim/gui/` |
 | 6.7 DDS·QoS | 모의 DDS (`Domain`, `Qos`) | `ucmssim/dds.py`, `config/qos.yaml` |
 | A.4.5 UCM 토픽 | 토픽 데이터클래스 | `ucmssim/topics.py` |
 | 6.9 설정 파일 | `vcu_ucm.yaml`, `ucms_bridge.yaml` | `config/` |
@@ -157,6 +184,7 @@ ucms_sim/
 │   ├── simple_device.py    단순 장비
 │   ├── ucms/               최소 UCMS
 │   ├── hmi.py              간이 HMI
+│   ├── gui/                웹 HMI (실시간 실행기, HTTP 서버, static/index.html)
 │   ├── deviation.py        편차 기록부
 │   ├── demo.py             서술형 데모
 │   └── harness/            시험대·시나리오·판정·보고서
