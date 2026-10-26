@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HMI 화면 (gui, 5배속)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ucmssim",
+      "args": ["gui", "--speed", "5"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "시험 캠페인 빠른 확인 (run --quick)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ucmssim",
+      "args": ["run", "--quick"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "시험 캠페인 전체 (run, 약 25 s)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ucmssim",
+      "args": ["run"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "서술형 데모 (demo)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ucmssim",
+      "args": ["demo"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

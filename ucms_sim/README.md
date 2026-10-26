@@ -33,6 +33,20 @@ python -m ucmssim gui --speed 5              # 간이 HMI 화면 (tkinter 창)
 python -m unittest discover -s tests -t .    # 단위·통합 시험
 ```
 
+### VS Code에서 실행
+
+1. **파일 → 폴더 열기**로 `ucms_sim` 폴더를 연다 (이 README가 있는 폴더).
+2. 확장 **Python**(Microsoft)을 설치하고, `Ctrl+Shift+P` → **Python: Create Environment** → Venv →
+   `requirements.txt` 선택 (PyYAML 설치). 이미 Python이 있으면 **Python: Select Interpreter**로 골라도 된다.
+3. 실행 방법 (아무거나)
+   - `run_gui.py` 또는 `run_campaign.py` 를 열고 오른쪽 위 **▶ (Run Python File)**
+   - **실행 및 디버그**(`Ctrl+Shift+D`)에서 구성 선택 후 **F5**: HMI 화면 / 시험 캠페인 빠른 확인 / 전체 / 데모
+   - 터미널(`` Ctrl+` ``)에서 위 명령 그대로
+4. 시험: 왼쪽 **테스트**(플라스크 아이콘) 탭에서 실행 (unittest 설정 포함).
+
+`ucmssim/` 안의 파일(`__main__.py`, `app.py` 등)을 직접 ▶로 실행하면 상대 import 오류가 난다.
+위의 `run_*.py` 나 F5 구성을 쓴다.
+
 `run` 의 출력 (`out/` 기본)
 
 | 파일 | 내용 |
