@@ -65,8 +65,7 @@ CREATE TABLE IF NOT EXISTS deviation_log (
 class UcmsStore:
     def __init__(self, path: str) -> None:
         self.path = path
-        # 웹 GUI에서는 스레드가 바뀌어도 호출이 잠금으로 직렬화되므로 스레드 검사를 끈다
-        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn = sqlite3.connect(path)
         self.conn.executescript(SCHEMA)
         self._samples: list[tuple] = []
 

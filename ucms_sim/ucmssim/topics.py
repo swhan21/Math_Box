@@ -264,6 +264,11 @@ def to_dict(sample: Any) -> dict[str, Any]:
     return {n: getattr(sample, n) for n in _field_names(type(sample))}
 
 
+def to_plain_dict(sample: Any) -> dict[str, Any]:
+    """Enum 을 값 문자열로 바꾼 사전 (화면 표시·JSON용)."""
+    return {k: v.value if isinstance(v, Enum) else v for k, v in to_dict(sample).items()}
+
+
 def encode(sample: Any) -> bytes:
     """온와이어 표현 (모의 DDS 직렬화). str 기반 Enum은 값 문자열로 직렬화된다."""
     return json.dumps(to_dict(sample), ensure_ascii=False, separators=(",", ":")).encode("utf-8")

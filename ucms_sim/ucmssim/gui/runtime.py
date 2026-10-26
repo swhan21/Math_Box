@@ -1,15 +1,14 @@
-"""웹 GUI용 실시간 실행기.
+"""HMI GUI용 실시간 실행기 (GUI 프레임워크와 무관한 부분).
 
-시험대(Testbed)를 백그라운드 스레드에서 벽시계에 맞춰(배속 적용) 진행시키고,
-HMI 화면 상태 조회와 명령을 받는다. 명령은 두 종류다.
+시험대(Testbed)를 벽시계에 맞춰(배속 적용) 진행시키고, HMI 화면 상태 조회와 명령을 받는다.
+GUI 이벤트 루프가 pump() 를 주기적으로 호출하므로 별도 스레드가 없다 (tkinter는 스레드 안전하지 않음).
+명령은 두 종류다.
   - HMI(O-role) 명령: 래치 고장 운용자 해제
   - 시험 하니스 명령: 속도 지령, 고장 주입(FI-01~10), VCU·UCMS 재기동, 배속
-모든 조회·명령은 하나의 잠금으로 시뮬레이션 진행과 직렬화된다.
 """
 
 from __future__ import annotations
 
-import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -28,6 +27,8 @@ PROFILE_VARIABLES = {
     "oscillate": "motor_temp",
     "cabin_hot": "cabin_temp",
 }
+
+MAX_STEP_S = 1.0        # pump() 한 번에 진행하는 최대 모의 시간 (화면 응답성 유지)
 
 
 class CommandError(ValueError):
@@ -56,12 +57,10 @@ class SimRuntime:
         self.cfg = cfg
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.tb = Testbed(cfg, seed, str(db_path), hmi_trend_len=trend_len)
-        self.lock = threading.Lock()
         self.speed = speed
         self.log: deque[tuple[float, str]] = deque(maxlen=40)
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
         self.error: str | None = None
+        self._anchor: tuple[float, float, float] | None = None     # (벽시계, 모의 시각, 배속)
         self._ucms_restart_pending = False
         self._commands: dict[str, Callable[..., str]] = {
             "clear_fault": self._clear_fault,
@@ -84,91 +83,84 @@ class SimRuntime:
     # -------------------------------------------------------------- 실행
 
     def start(self) -> None:
-        with self.lock:
-            self.tb.start()
-            self.tb.vcu.set_speed(20.0)
-            self._log("시뮬레이션 시작, 속도 지령 20 km/h")
-        self._thread = threading.Thread(target=self._loop, name="ucms-sim", daemon=True)
-        self._thread.start()
+        self.tb.start()
+        self.tb.vcu.set_speed(20.0)
+        self._log("시뮬레이션 시작, 속도 지령 20 km/h")
 
     def stop(self) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-        with self.lock:
-            self.tb.close()
+        self.tb.close()
 
     def advance(self, duration: float) -> None:
-        """스레드 없이 모의 시간을 진행한다 (시험·스크립트용)."""
-        with self.lock:
-            self.tb.run_for(duration)
+        """벽시계와 무관하게 모의 시간을 진행한다 (시험·스크립트용)."""
+        self.tb.run_for(duration)
 
-    def _loop(self) -> None:
-        speed = self.speed
-        wall0, sim0 = time.monotonic(), self.tb.now
-        while not self._stop.is_set():
-            if self.speed != speed:                         # 배속 변경 → 기준점 재설정
-                speed = self.speed
-                wall0, sim0 = time.monotonic(), self.tb.now
-            if speed > 0:
-                target = sim0 + (time.monotonic() - wall0) * speed
-                with self.lock:
-                    try:
-                        if target > self.tb.now:
-                            self.tb.sched.run_until(min(target, self.tb.now + 1.0))
-                    except Exception as e:          # 시뮬레이션 정지, 화면에 표시
-                        self.error = f"{type(e).__name__}: {e}"
-                        self._log(f"시뮬레이션 오류로 정지 — {self.error}")
-                        return
-            self._stop.wait(0.02)
+    def pump(self) -> None:
+        """벽시계 경과 × 배속만큼 모의 시간을 진행한다. GUI가 수십 ms 주기로 호출한다."""
+        if self.error is not None:
+            return
+        wall = time.monotonic()
+        if self._anchor is None or self._anchor[2] != self.speed or self.speed <= 0:
+            self._anchor = (wall, self.tb.now, self.speed)          # 시작·배속 변경·일시정지 → 기준점 재설정
+            return
+        wall0, sim0, speed = self._anchor
+        target = sim0 + (wall - wall0) * speed
+        if target <= self.tb.now:
+            return
+        try:
+            self.tb.sched.run_until(min(target, self.tb.now + MAX_STEP_S))
+        except Exception as e:                                       # 시뮬레이션 정지, 화면에 표시
+            self.error = f"{type(e).__name__}: {e}"
+            self._log(f"시뮬레이션 오류로 정지 — {self.error}")
+            return
+        if target - self.tb.now > MAX_STEP_S:                       # 계산이 배속을 못 따라감 → 밀린 시간 버림
+            self._anchor = (wall, self.tb.now, speed)
 
     # -------------------------------------------------------------- 조회
 
     def snapshot(self) -> dict[str, Any]:
-        with self.lock:
-            tb = self.tb
-            p, vcu = tb.plant, tb.vcu
-            if not vcu.powered:
-                vcu_state = "전원 차단"
-            elif vcu.control is None:
-                vcu_state = "부팅 중"
-            elif vcu.pbit_result is None:
-                vcu_state = "PBIT 중"
-            else:
-                vcu_state = "운용"
-            if tb.ucms.running:
-                ucms_state = "동작"
-            else:
-                ucms_state = "정지 (재기동 대기)" if self._ucms_restart_pending else "정지"
-            return {
-                "hmi": tb.hmi.snapshot(),
-                "harness": {
-                    "t": tb.now,
-                    "error": self.error,
-                    "sim_speed": self.speed,
-                    "setpoint_kph": vcu.speed_setpoint_kph,
-                    "toggles": {
-                        "can_block": p.faults.inverter_can_blocked,
-                        "sensor_open": p.faults.motor_temp_sensor_open,
-                        "wheel_stuck": p.faults.wheel_left_stuck,
-                        "estop": p.estop_pressed,
-                    },
-                    "busy": {name: p.has_override(var) for name, var in PROFILE_VARIABLES.items()},
-                    "vcu": vcu_state,
-                    "boot_count": vcu.boot_count,
-                    "ucms": ucms_state,
-                    "plant": {
-                        "speed_kph": round(p.speed * 3.6, 2),
-                        "motor_temp": round(p.motor_temp, 2),
-                        "inverter_temp": round(p.inverter_temp, 2),
-                        "battery_voltage": round(p.battery_voltage, 2),
-                        "soc": round(p.soc * 100.0, 2),
-                        "vcu_temp": round(p.vcu_temp, 2),
-                        "cabin_temp": round(p.cabin_temp, 2),
-                    },
-                    "log": [{"t": t, "text": text} for t, text in reversed(self.log)],
+        tb = self.tb
+        p, vcu = tb.plant, tb.vcu
+        if not vcu.powered:
+            vcu_state = "전원 차단"
+        elif vcu.control is None:
+            vcu_state = "부팅 중"
+        elif vcu.pbit_result is None:
+            vcu_state = "PBIT 중"
+        else:
+            vcu_state = "운용"
+        if tb.ucms.running:
+            ucms_state = "동작"
+        else:
+            ucms_state = "정지 (재기동 대기)" if self._ucms_restart_pending else "정지"
+        return {
+            "hmi": tb.hmi.snapshot(),
+            "harness": {
+                "t": tb.now,
+                "error": self.error,
+                "sim_speed": self.speed,
+                "setpoint_kph": vcu.speed_setpoint_kph,
+                "toggles": {
+                    "can_block": p.faults.inverter_can_blocked,
+                    "sensor_open": p.faults.motor_temp_sensor_open,
+                    "wheel_stuck": p.faults.wheel_left_stuck,
+                    "estop": p.estop_pressed,
                 },
-            }
+                "busy": {name: p.has_override(var) for name, var in PROFILE_VARIABLES.items()},
+                "vcu": vcu_state,
+                "boot_count": vcu.boot_count,
+                "ucms": ucms_state,
+                "plant": {
+                    "speed_kph": p.speed * 3.6,
+                    "motor_temp": p.motor_temp,
+                    "inverter_temp": p.inverter_temp,
+                    "battery_voltage": p.battery_voltage,
+                    "soc": p.soc * 100.0,
+                    "vcu_temp": p.vcu_temp,
+                    "cabin_temp": p.cabin_temp,
+                },
+                "log": [{"t": t, "text": text} for t, text in reversed(self.log)],
+            },
+        }
 
     # -------------------------------------------------------------- 명령
 
@@ -176,13 +168,12 @@ class SimRuntime:
         fn = self._commands.get(action)
         if fn is None:
             raise CommandError(f"알 수 없는 명령: {action}")
-        with self.lock:
-            try:
-                message = fn(**(args or {}))
-            except TypeError:
-                raise CommandError(f"{action}: 인수 오류") from None
-            self._log(message)
-            return message
+        try:
+            message = fn(**(args or {}))
+        except TypeError:
+            raise CommandError(f"{action}: 인수 오류") from None
+        self._log(message)
+        return message
 
     def _log(self, text: str) -> None:
         self.log.append((self.tb.now, text))

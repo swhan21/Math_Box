@@ -3,7 +3,7 @@
     python -m ucmssim list                       시나리오 목록
     python -m ucmssim run [--quick] [...]        고장 주입 시험 캠페인 (FI-01~13) → out/
     python -m ucmssim demo [--realtime 5 --live] 서술형 데모 (HMI 화면)
-    python -m ucmssim gui [--port 8765]          웹 HMI (브라우저에서 http://127.0.0.1:8765/)
+    python -m ucmssim gui [--speed 5]            간이 HMI 화면 (tkinter)
 """
 
 from __future__ import annotations
@@ -36,12 +36,10 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--live", action="store_true", help="1초마다 HMI 화면 갱신 (--realtime 과 함께)")
     demo.add_argument("--db", type=Path, default=Path("out/demo.sqlite"))
 
-    gui = sub.add_parser("gui", help="웹 HMI (실시간 시뮬레이션 + 브라우저 화면)")
-    gui.add_argument("--host", default="127.0.0.1", help="바인딩 주소 (기본 127.0.0.1, 인증 없음 주의)")
-    gui.add_argument("--port", type=int, default=8765)
+    gui = sub.add_parser("gui", help="간이 HMI 화면 (실시간 시뮬레이션 + tkinter 창)")
     gui.add_argument("--speed", type=float, default=1.0, help="시작 배속 (화면에서 변경 가능)")
+    gui.add_argument("--theme", choices=("dark", "light"), default="dark")
     gui.add_argument("--db", type=Path, default=Path("out/gui.sqlite"))
-    gui.add_argument("--open", action="store_true", help="브라우저 자동 열기")
 
     args = ap.parse_args(argv)
     try:
@@ -56,8 +54,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "gui":
-        from .gui.server import run_gui
-        run_gui(cfg, args.host, args.port, args.speed, args.db, open_browser=args.open)
+        try:
+            from .gui.app import run_app
+        except ImportError as e:
+            ap.exit(1, f"tkinter를 불러올 수 없음 ({e}).\n"
+                       "Windows·macOS 공식 Python에는 포함되어 있다. Ubuntu: sudo apt install python3-tk\n")
+        run_app(cfg, args.speed, args.db, theme=args.theme)
         return 0
 
     if args.cmd == "demo":

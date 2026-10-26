@@ -26,7 +26,7 @@ from .topics import (
     MonitoredResource,
     MonitoredResourceSpecification,
     ThresholdExceedanceEvent,
-    to_dict,
+    to_plain_dict,
 )
 
 SPARK = "▁▂▃▄▅▆▇█"
@@ -188,10 +188,11 @@ class SimpleHmi:
         return {
             "t": now,
             "resources": resources,
-            "faults": [to_dict(ev) for ev in sorted(self.active_faults.values(), key=lambda e: e.event_id)],
-            "thresholds": [to_dict(ev) for ev in sorted(self.active_thresholds.values(), key=lambda e: e.event_id)],
+            "faults": [to_plain_dict(ev) for ev in sorted(self.active_faults.values(), key=lambda e: e.event_id)],
+            "thresholds": [to_plain_dict(ev)
+                           for ev in sorted(self.active_thresholds.values(), key=lambda e: e.event_id)],
             "trends": trends,
-            "usage": [to_dict(u) for _, u in sorted(self.usage.items())],
+            "usage": [to_plain_dict(u) for _, u in sorted(self.usage.items())],
             "events": [{"t": t, "kind": k, "text": x} for t, k, x in reversed(self.event_log)],
         }
 
